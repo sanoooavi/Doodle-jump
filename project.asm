@@ -24,9 +24,9 @@
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
    BALL_CENTER_Y DW 0B9h                 ;current Y position (line) of the ball     
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF1h         ;original velocity is -16              V collision=-16
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is -16              V collision=-15
    BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
-   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-16
+   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-15
    BALL_DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0   
   
    ;Drawing ball features 
@@ -357,7 +357,7 @@ CHANGE_VELOCITY PROC
     RET
     INCREASE_SPEED_Y:
         INC BALL_VELOCITY_Y     ;
-        CMP BALL_VELOCITY_Y,10h
+        CMP BALL_VELOCITY_Y,0Fh  ;15
         JG SET
         RET   
         SET:
