@@ -1,7 +1,8 @@
 .MODEL SMALL
 .STACK 64  
 
-.DATA 
+.DATA
+   BALL_COLLIDED DB 0
    GAME_ACTIVE DB 1                     ;is the game active?      
    TEXT_GAME_OVER DB 'GAME OVER','$'
    ;Window features        
@@ -12,10 +13,11 @@
    ;Ball features
        
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
-   BALL_CENTER_Y DW 0B4h                 ;current Y position (line) of the ball
+   BALL_CENTER_Y DW 0BCh                 ;current Y position (line) of the ball  
+                                         ;the ball starts at y=188 and goes up
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0Eh         ;original velocity is 15   
-   BALL_VELOCITY_X DW 08h               ;X (horizontal) velocity of the ball
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF1h         ;original velocity is 15   
+   BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
    BALL_VELOCITY_Y DW 0FFF1h               ;Y (vertical) velocity of the ball   
       
     
@@ -29,10 +31,10 @@
    PLATFORM_WIDTH DW 50
    PLATFORM_HEIGHT DW 5 
    ;The platforms can start between 0 to 299
-   PLATFORM1_X DW 20   ;x=random
-   PLATFORM1_Y DW 0B4H  ;y=180
+   PLATFORM1_X DW 20H   ;x=random
+   PLATFORM1_Y DW 5AH  ;y=90
    PLATFORM2_X DW 20     ;x=random
-   PLATFORM2_Y DW 50H    ;y=80    
+   PLATFORM2_Y DW 0B4H    ;y=180   
    
    SCORE DB 0
    
@@ -101,9 +103,7 @@ MOVE_BALL PROC
     MOV AX,BALL_RADIUS            ; Check if the ball has passed the top boundarie    
     ADD AX,07h                       ; Add for window bounds        
     CMP BALL_CENTER_Y,AX            ; If is colliding, reverse the velocity in Y
-    JL NEG_VELOCITY_Y                 
-    
-    
+    JL NEXT_PAGE                 
     
     ;if the ball collides with down boundry 
     MOV AX,WINDOW_HEIGHT                       
@@ -113,19 +113,24 @@ MOVE_BALL PROC
 	JL  func         
 	
 	;esle if the ball_y is equal or greater than the boundry the game is over
-	;GAME_OVER:
-       ;MOV GAME_ACTIVE,00h 
-       ;RET         
+	GAME_OVER:
+       MOV GAME_ACTIVE,00h 
+       RET         
                                
-	NEG_VELOCITY_Y:
-	    NEG BALL_VELOCITY_Y   ;reverse the velocity in Y of the ball 
+	;NEG_VELOCITY_Y:
+	    ;NEG BALL_VELOCITY_Y   ;reverse the velocity in Y of the ball 
 	func:    	
 	CALL CHECK_FOR_KEYBOARD    
-    CALL CHECK_FOR_COLLIDING                                        
+    CALL CHECK_FOR_COLLIDING 
+    CMP BALL_COLLIDED,1             ;check if the ball collided with one of the platforms
+    JE END_PART                    ;if did then we do not change the velocity                   
     CALL CHANGE_VELOCITY         
-    END_PART:
+    END_PART: 
+        MOV BALL_COLLIDED,00h
         RET  
-   
+    NEXT_PAGE:
+        MOV BALL_CENTER_Y,0BCH
+        RET
 MOVE_BALL ENDP  
 ;---------------------------CHECK_FOR_KEYBOARD----------------------;
 CHECK_FOR_KEYBOARD PROC       
@@ -151,7 +156,7 @@ CHECK_FOR_KEYBOARD PROC
 	       	SUB BALL_CENTER_X,AX
 	       	
 	       	MOV AX,BALL_RADIUS   
-	       	ADD AX,01h
+	       	INC AX
 	       	CMP BALL_CENTER_X,AX
 	       	JL FIX_BALL_TO_RIGHT
 	       	RET       
@@ -159,7 +164,7 @@ CHECK_FOR_KEYBOARD PROC
 	       	FIX_BALL_TO_RIGHT:
 	       	    MOV AX,WINDOW_WIDTH
 	       	    SUB AX,BALL_RADIUS 
-	       	    SUB AX,01h
+	       	    DEC AX
 	       	    MOV BALL_CENTER_X,AX
 	        	RET
 	       	
@@ -175,7 +180,7 @@ CHECK_FOR_KEYBOARD PROC
 	       	RET	       	       
 	       	FIX_BALL_TO_LEFT:
 	       	    MOV AX,BALL_RADIUS 
-	       	    ADD AX,01h
+	       	    INC AX
 	       	    MOV BALL_CENTER_X,AX 
        RET
 CHECK_FOR_KEYBOARD ENDP	    
@@ -186,19 +191,20 @@ CHANGE_VELOCITY PROC
     JG  INCREASE_SPEED_Y            ;If the velocity is positive ,the ball is going down, we increase by 15
     JL  DECREASE_SPEED_Y            ;if the velocity is negative, the ball is going up, we decrease (-15+1)
     ;else if it is zero
-    ADD BALL_VELOCITY_Y,1         ;If the velocity is zero the it is at top ,we make velocity=1
+    INC BALL_VELOCITY_Y         ;If the velocity is zero the it is at top ,we make velocity=1
     ;NEG BALL_VELOCITY_Y    
     RET
     INCREASE_SPEED_Y:
-        ADD BALL_VELOCITY_Y,1
-        CMP BALL_VELOCITY_Y,0Fh ;comare the velocity with 15
-        JG  CONVERT_DIRECTION    ;if the speed is 16 e.g we should go up     
+        INC BALL_VELOCITY_Y
+        ;CMP BALL_VELOCITY_Y,0Eh ;comare the velocity with 15
+        ;JG  CONVERT_DIRECTION    ;if the speed is 16 e.g we should go up     
         RET  
-          CONVERT_DIRECTION:
-            MOV BALL_VELOCITY_Y,0FFF1h
-        RET
+        ;  CONVERT_DIRECTION:    
+        ;    MOV AX,ORIGINAL_BALL_VELOCITY_Y
+        ;    MOV BALL_VELOCITY_Y,AX
+        ;RET
     DECREASE_SPEED_Y:
-       ADD BALL_VELOCITY_Y,1  
+       INC BALL_VELOCITY_Y  
        RET
   RET
 CHANGE_VELOCITY ENDP  
@@ -206,51 +212,69 @@ CHANGE_VELOCITY ENDP
 CHECK_FOR_COLLIDING PROC 
       ; Check if the ball is colliding with platform1
 	  ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
-	  ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH  
+	  ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
+	
      CHECK_PLATFORM1_COLLIDING:  
 		    
-	       MOV AX,PLATFORM1_X
+	       MOV AX,PLATFORM1_X              ;the ball_x>platform_x
 		   CMP BALL_CENTER_X,AX
 	       JL  CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2
 	    	
-    	   ADD AX,PLATFORM_WIDTH
+    	   ADD AX,PLATFORM_WIDTH          ;the ball_x<=platform_x+width
 		   CMP BALL_CENTER_X,AX
     	   JG  CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2
 		
 		   MOV AX,BALL_CENTER_Y
+	       ADD AX,BALL_RADIUS
+	       MOV BX,PLATFORM1_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JL CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
+		   
+		   
+		   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
 	       SUB AX,BALL_RADIUS
 	       MOV BX,PLATFORM1_Y
-	       ADD BX,PLATFORM_HEIGHT
+	       SUB BX,PLATFORM_HEIGHT
 		   CMP AX,BX
-		   JG CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
+		   JGE CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
 		   
-		   COLLIDED_1:           
-		     MOV AX,ORIGINAL_BALL_VELOCITY_Y
+		   COLLIDED_1:
+		     MOV BALL_COLLIDED,1           
+		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
 		     MOV BALL_VELOCITY_Y,AX   
-		     ADD SCORE,1
+		     INC SCORE
 		     RET     
 		        
 	  CHECK_PLATFORM2_COLLIDING:
-		     
+		    
 	       MOV AX,PLATFORM2_X
 		   CMP BALL_CENTER_X,AX
 	       JL  RETURN  ;if there's no collision go to end part
-	    	
+
     	   ADD AX,PLATFORM_WIDTH
 		   CMP BALL_CENTER_X,AX
-    	   JG  RETURN  ;if there's no collision go to end part
-		
-		   MOV AX,BALL_CENTER_Y
+    	   JG  RETURN  ;if there's no collision go to end part  
+    	   
+    	   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
 	       SUB AX,BALL_RADIUS
-	       MOV BX,PLATFORM1_Y
-	       ADD BX,PLATFORM_HEIGHT
+	       MOV BX,PLATFORM2_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JGE RETURN  ;if there's no collision check platform2
+		     
+		   MOV AX,BALL_CENTER_Y
+	       ADD AX,BALL_RADIUS
+	       MOV BX,PLATFORM2_Y
+	       SUB BX,PLATFORM_HEIGHT
 	       CMP AX,BX
-	       JG RETURN  ;if there's no collision go to end part 
-	       
-	       COLLIDED_2:
-	         MOV AX,ORIGINAL_BALL_VELOCITY_Y
+	       JL RETURN  ;if there's no collision go to end part 
+		   
+	       COLLIDED_2: 
+	         MOV BALL_COLLIDED,1  
+             MOV AX,ORIGINAL_BALL_VELOCITY_Y   
 		     MOV BALL_VELOCITY_Y,AX 
-	         ADD SCORE,1 
+	         INC SCORE 
 	  RETURN:       
 	    RET              
 CHECK_FOR_COLLIDING ENDP
@@ -321,7 +345,7 @@ DRAW_BALL PROC NEAR
         MOV P,AX                 ;P=P+1+2*y
         JMP PRINT   
         OUTSIDE_OF_CIRCLE:          ;if(the point is outside) the next pixel is (x-1,y+1)
-            SUB D_X,1
+            DEC D_X
             MOV AX,P
             INC AX
             ADD AX,D_Y
