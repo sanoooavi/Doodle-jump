@@ -1,14 +1,22 @@
 .MODEL SMALL
 .STACK 64  
 
-.DATA
+.DATA            
+   ;MAIN MENU
+   TEXT_MAINMENU_TITLE DB 'DOODLE JUMP MAIN MENU','$'
+   TEXT_MAINMENU_PLAY  DB 'PRESS S TO PLAY THE GAME','$'  
+   TEXT_MAINMENU_EXIT  DB 'PRESS E TO EXIT THE GAME','$'
+
+
+   MOVE_PAGE DB 0
    BALL_COLLIDED DB 0
    GAME_ACTIVE DB 1                     ;is the game active?      
-   TEXT_GAME_OVER DB 'GAME OVER','$'
+   TEXT_GAME_OVER DB 'GAME OVER','$'  
+   ;NEXT_PAGE DB 0
    ;Window features        
    WINDOW_WIDTH DW 140h                 ;the width of the window (320 pixels)
    WINDOW_HEIGHT DW 0C8h               ;the height of the window (200 pixels)     
-   
+   DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0
    
    ;Ball features
        
@@ -16,9 +24,9 @@
    BALL_CENTER_Y DW 0BCh                 ;current Y position (line) of the ball  
                                          ;the ball starts at y=188 and goes up
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF1h         ;original velocity is 15   
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is 15              V collision=-16
    BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
-   BALL_VELOCITY_Y DW 0FFF1h               ;Y (vertical) velocity of the ball   
+   BALL_VELOCITY_Y DW 0FFF4h               ;Y (vertical) velocity of the ball       ;V0=-12
       
     
    D_X DW ?
@@ -31,10 +39,10 @@
    PLATFORM_WIDTH DW 50
    PLATFORM_HEIGHT DW 5 
    ;The platforms can start between 0 to 299
-   PLATFORM1_X DW 20H   ;x=random
-   PLATFORM1_Y DW 5AH  ;y=90
-   PLATFORM2_X DW 20     ;x=random
-   PLATFORM2_Y DW 0B4H    ;y=180   
+   PLATFORM2_X DW 40H   ;x=random
+   PLATFORM2_Y DW 50H  ;y=80
+   PLATFORM1_X DW 20     ;x=random
+   PLATFORM1_Y DW 0B5H    ;y=181  
    
    SCORE DB 0
    
@@ -42,12 +50,18 @@
    
    
 
+
+
+;---------------------------------MAIN CODE-----------------------------;
 .CODE
 
-MAIN PROC FAR
+MAIN PROC FAR                                                               
+    
      MOV AX, @DATA                            
      MOV DS, AX    
-     CALL CLEAR_SCREEN  
+     CALL CLEAR_SCREEN 
+     CALL START_GAME    
+     
      CHECK_TIME:     
 
         MOV AH,2Ch                   ;get the system time
@@ -55,44 +69,109 @@ MAIN PROC FAR
 		CMP TIME_AUX,DL
 		JE CHECK_TIME    
 		MOV TIME_AUX,DL   
-		NEW_COORDINATE_PLATFORM:                 
+		;NEW_COORDINATE_PLATFORM:                 
 		
-		;OldRange = (OldMax - OldMin)  
+		;CMP NEW_PAGE,0
+		;JE PRINITING_PLAY:
+		
+		
+		CREATE_RANDOM_PLATFORM:
+		
+		    
+		PRINTING_PLAY:       
+          CALL CLEAR_SCREEN                      
+          CALL MOVE_BALL
+          CALL DRAW_BALL
+          CALL DRAW_PLATFORM   
+          CMP GAME_ACTIVE,00h
+          JE SHOW_GAME_OVER              
+          JMP CHECK_TIME      
+        
+        SHOW_GAME_OVER:
+         CALL GAME_OVER_MENU  
+        ;OldRange = (OldMax - OldMin)  
         ;NewRange = (NewMax - NewMin)  
         ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
         
 		    
 		    ;DH contains second           
-		    ;MOV AL,DH
-		    ;MOV BL,5           
+		   ; MOV AL,DH
+		   ; MOV BL,5           
 		    ;5 is the result of old range(299)/new range(59)
-		    ;MUL BL
-		    ;MOV PLATFORM1_X,AX  
+		   ; MUL BL
+		   ; MOV PLATFORM1_X,AX  
 		    ;DL is a number between 0 to 100   
-		    ;MOV DH,0
-		    ;MOV PLATFORM1_Y,DX             ;we need platform 1_y to be between 0 and 99   
+		   ; MOV DH,0
+		   ; MOV PLATFORM2_X,DX             ;we need platform 1_y to be between 0 and 99   
 		
 		    ;MOV AH,0
 		    ;MOV AL,DL
 		    ;MOV CL,10
 		    ;DIV CL   ;AH has the remainder
 		                
-		    
-		       
-        CALL CLEAR_SCREEN                      
-        CALL MOVE_BALL
-        CALL DRAW_BALL
-        CALL DRAW_PLATFORM   
-        CMP GAME_ACTIVE,00h
-        JE SHOW_GAME_OVER              
-        JMP CHECK_TIME      
-        
-        SHOW_GAME_OVER:
-         CALL GAME_OVER_MENU  
-     
             
   RET       
 MAIN ENDP   
+
+
+;---------------------------START_GAME----------------------;
+START_GAME PROC               
+    WAIT_FOR_KEY_MENU:
+    MOV AH,02h                       ;set cursor position
+	MOV BH,00h                       ;set page number
+	MOV DH,09h                       ;y 
+	MOV DL,0Ah						 ;x
+	INT 10h	
+							 
+	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
+	LEA DX,TEXT_MAINMENU_TITLE           ;give DX a pointer 
+	INT 21h         
+	
+	MOV AH,02h                       ;set cursor position
+	MOV BH,00h                       ;set page number
+	MOV DH,0Ch                       ;y 
+	MOV DL,09h						 ;x
+	INT 10h	
+							 
+	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
+	LEA DX,TEXT_MAINMENU_PLAY           ;give DX a pointer 
+	INT 21h  
+	
+	MOV AH,02h                       ;set cursor position
+	MOV BH,00h                       ;set page number
+	MOV DH,0Fh                       ;y 
+	MOV DL,09h						 ;x
+	INT 10h	
+							 
+	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
+	LEA DX,TEXT_MAINMENU_EXIT           ;give DX a pointer 
+	INT 21h  
+	
+	;waits for any key to press  
+	MOV AH,00h
+    INT 16h    
+    
+    CMP AL,'S'
+    JE GO_TO_GAME    
+    CMP AL,'E'   
+    JE CALLING_EXIT
+     
+	JMP WAIT_FOR_KEY_MENU 
+	CALLING_EXIT:
+    	 CALL EXIT_PROGRAM
+    GO_TO_GAME:
+        RET
+START_GAME ENDP
+;---------------------------EXIT-PROGRAM----------------------;
+EXIT_PROGRAM PROC
+ 	MOV AH,00h                   ;set the configuration to video mode
+	MOV AL,02h                   ;choose the video mode    (320*200)
+	INT 10h    					 ;execute the configuration 
+	MOV AH,4Ch 					 ;set the configuration 				
+	INT 21h    					 ;execute the configuration	
+
+EXIT_PROGRAM ENDP
+
 
 ;---------------------------MOVE_BALL----------------------;
 MOVE_BALL PROC
@@ -110,16 +189,14 @@ MOVE_BALL PROC
     SUB AX,BALL_RADIUS     
     SUB AX,03h
 	CMP BALL_CENTER_Y,AX                    ;BALL_Y is compared with the bottom boundary o   
-	JL  func         
+	JL  CONTINUE         
 	
 	;esle if the ball_y is equal or greater than the boundry the game is over
 	GAME_OVER:
        MOV GAME_ACTIVE,00h 
-       RET         
-                               
-	;NEG_VELOCITY_Y:
-	    ;NEG BALL_VELOCITY_Y   ;reverse the velocity in Y of the ball 
-	func:    	
+       RET                                                                        
+       
+	CONTINUE:    	
 	CALL CHECK_FOR_KEYBOARD    
     CALL CHECK_FOR_COLLIDING 
     CMP BALL_COLLIDED,1             ;check if the ball collided with one of the platforms
@@ -144,10 +221,10 @@ CHECK_FOR_KEYBOARD PROC
     	MOV AH,00h ;check which key is being pressed
     	INT 16h    ;AL has the ascii code    
 	
-	    CMP AL,'j'
+	    CMP AL,'J'
 	    JE MOVE_BALL_LEFT  
 	
-	    CMP AL,'k'
+	    CMP AL,'K'
 	    JE MOVE_BALL_RIGHT
 	    RET     
 	
@@ -188,21 +265,20 @@ CHECK_FOR_KEYBOARD ENDP
 CHANGE_VELOCITY PROC 
     
     CMP BALL_VELOCITY_Y,00h         ;if the ball velocity is 0 ,we should increase the velocity
-    JG  INCREASE_SPEED_Y            ;If the velocity is positive ,the ball is going down, we increase by 15
+    JG  INCREASE_SPEED_Y            ;If the velocity is positive ,the ball is going down, we increase it
     JL  DECREASE_SPEED_Y            ;if the velocity is negative, the ball is going up, we decrease (-15+1)
     ;else if it is zero
     INC BALL_VELOCITY_Y         ;If the velocity is zero the it is at top ,we make velocity=1
-    ;NEG BALL_VELOCITY_Y    
+    MOV DIRECTION,1             ;the ball is moving down
     RET
     INCREASE_SPEED_Y:
-        INC BALL_VELOCITY_Y
-        ;CMP BALL_VELOCITY_Y,0Eh ;comare the velocity with 15
-        ;JG  CONVERT_DIRECTION    ;if the speed is 16 e.g we should go up     
-        RET  
-        ;  CONVERT_DIRECTION:    
-        ;    MOV AX,ORIGINAL_BALL_VELOCITY_Y
-        ;    MOV BALL_VELOCITY_Y,AX
-        ;RET
+        INC BALL_VELOCITY_Y     ;
+        CMP BALL_VELOCITY_Y,10h
+        JG SET
+        RET   
+        SET:
+         DEC BALL_VELOCITY_Y
+         RET      
     DECREASE_SPEED_Y:
        INC BALL_VELOCITY_Y  
        RET
@@ -210,10 +286,15 @@ CHANGE_VELOCITY PROC
 CHANGE_VELOCITY ENDP  
 ;---------------------------CHECK_FOR_COLLIDING----------------------;
 CHECK_FOR_COLLIDING PROC 
-      ; Check if the ball is colliding with platform1
-	  ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
-	  ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
-	
+      
+	 CMP DIRECTION,1    ;if the ball is going up collision does not affect
+	 JE  CHECK_PLATFORM1_COLLIDING  
+	 RET  ;if the direction equals to 0 ,then return
+	 
+	 ; Check if the ball is colliding with platform1
+	 ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
+	 ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
+	 
      CHECK_PLATFORM1_COLLIDING:  
 		    
 	       MOV AX,PLATFORM1_X              ;the ball_x>platform_x
@@ -240,13 +321,16 @@ CHECK_FOR_COLLIDING PROC
 		   JGE CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
 		   
 		   COLLIDED_1:
-		     MOV BALL_COLLIDED,1           
+		     MOV BALL_COLLIDED,1  ;the ball collides with the platform       
+		     MOV MOVE_PAGE,1
+		     MOV DIRECTION,0     ;the direction changes to up      
 		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
 		     MOV BALL_VELOCITY_Y,AX   
 		     INC SCORE
 		     RET     
 		        
 	  CHECK_PLATFORM2_COLLIDING:
+
 		    
 	       MOV AX,PLATFORM2_X
 		   CMP BALL_CENTER_X,AX
@@ -271,7 +355,9 @@ CHECK_FOR_COLLIDING PROC
 	       JL RETURN  ;if there's no collision go to end part 
 		   
 	       COLLIDED_2: 
-	         MOV BALL_COLLIDED,1  
+	         MOV BALL_COLLIDED,1    
+	         MOV DIRECTION,0  ;the direction changes to up 
+	        ; MOV NEXT_PAGE,1 ;we should change the 2 platforms randomly as if it is a new page
              MOV AX,ORIGINAL_BALL_VELOCITY_Y   
 		     MOV BALL_VELOCITY_Y,AX 
 	         INC SCORE 
