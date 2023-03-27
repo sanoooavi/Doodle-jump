@@ -6,52 +6,50 @@
    TEXT_MAINMENU_TITLE DB 'DOODLE JUMP MAIN MENU','$'
    TEXT_MAINMENU_PLAY  DB 'PRESS S TO PLAY THE GAME','$'  
    TEXT_MAINMENU_EXIT  DB 'PRESS E TO EXIT THE GAME','$'
+   TEXT_GAME_OVER DB 'GAME OVER','$'  
+   TEXT_PLAYER_SCORE DB '0','$'
 
-
-   MOVE_PAGE DB 0
+   MOVE_PAGE DB 0  
+   CREATE_NEW_PLATFORM DB 0
    BALL_COLLIDED DB 0
    GAME_ACTIVE DB 1                     ;is the game active?      
-   TEXT_GAME_OVER DB 'GAME OVER','$'  
-   ;NEXT_PAGE DB 0
+  
    ;Window features        
    WINDOW_WIDTH DW 140h                 ;the width of the window (320 pixels)
    WINDOW_HEIGHT DW 0C8h               ;the height of the window (200 pixels)     
-   DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0
+   
    
    ;Ball features
-       
+   ;the ball starts at y=188 and goes up    
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
-   BALL_CENTER_Y DW 0BCh                 ;current Y position (line) of the ball  
-                                         ;the ball starts at y=188 and goes up
+   BALL_CENTER_Y DW 0B9h                 ;current Y position (line) of the ball     
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is 15              V collision=-16
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF1h         ;original velocity is -16              V collision=-16
    BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
-   BALL_VELOCITY_Y DW 0FFF4h               ;Y (vertical) velocity of the ball       ;V0=-12
-      
-    
+   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-16
+   BALL_DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0   
+  
+   ;Drawing ball features 
    D_X DW ?
    D_Y DW 0   
    P DW 0
 
-   TIME_AUX DB 0 
-   
+ 
    ;PLATFORMS    
    PLATFORM_WIDTH DW 50
-   PLATFORM_HEIGHT DW 5 
-   ;The platforms can start between 0 to 299
-   PLATFORM2_X DW 40H   ;x=random
-   PLATFORM2_Y DW 50H  ;y=80
-   PLATFORM1_X DW 20     ;x=random
-   PLATFORM1_Y DW 0B5H    ;y=181  
+   PLATFORM_HEIGHT DW 5  
+   PLATFORM1_X DW 20H     ;x=random
+   PLATFORM1_Y DW 0B4H    ;y=180  
+   ;the second platform should be upper
+   PLATFORM2_X DW 64H   ;x=random     ;The platforms can start between 0 to 250
+   PLATFORM2_Y DW 1EH  ;y=30
+   
+   PLATFORM_NEW_X DW ?   ;x=random     
+   PLATFORM_NEW_Y DW 0FF88h  ;
    
    SCORE DB 0
+   TIME_AUX DB 0 
    
-   ;RANDOM NUMBER BASE
-   
-   
-
-
-
 ;---------------------------------MAIN CODE-----------------------------;
 .CODE
 
@@ -68,55 +66,87 @@ MAIN PROC FAR
 		INT 21h    					 ;CH = hour CL = minute DH = second DL = 1/100 seconds                    
 		CMP TIME_AUX,DL
 		JE CHECK_TIME    
-		MOV TIME_AUX,DL   
-		;NEW_COORDINATE_PLATFORM:                 
+		MOV TIME_AUX,DL 
+		CMP CREATE_NEW_PLATFORM,1
+		JE USE_RANDOM            
+		JMP CHECK_MOVING       
 		
-		;CMP NEW_PAGE,0
-		;JE PRINITING_PLAY:
-		
-		
-		CREATE_RANDOM_PLATFORM:
-		
+		USE_RANDOM:     
+		         MOV CREATE_NEW_PLATFORM,0
+		         ;OldRange = (OldMax - OldMin)  
+                 ;NewRange = (NewMax - NewMin)  
+                 ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
+                 ;new new platform's x should be in range of [0,250]
+		         ;old range=9 ,new range=250 ,new_val=x*(250/9=25)
+		         ;DL is a number between 0 to 100   
+		         MOV DH,0
+		         MOV AH,00h  
+		         MOV AL,DL
+		         MOV BL,0Ah
+		         DIV BL   ;AH has the reaminder   
+		         MOV AL,AH
+		         MOV BL,1Bh ;BL=27
+		         MUL BL   ;AX has the reult (between 0 to 250)     
+		         MOV PLATFORM_NEW_X,AX
+		         MOV PLATFORM_NEW_Y,0FF88h ;not in the page
+		        
+		CHECK_MOVING:  
+             CMP MOVE_PAGE,1     ;check for moving
+             JNE PRINTING_PLAY
+	    	
+	    	MOVEMENT:
+		        CALL MOVE_PLATFORM2_DOWN 
 		    
 		PRINTING_PLAY:       
           CALL CLEAR_SCREEN                      
           CALL MOVE_BALL
           CALL DRAW_BALL
-          CALL DRAW_PLATFORM   
+          CALL DRAW_PLATFORM  
+          CALL DRAW_SCORE
+           
           CMP GAME_ACTIVE,00h
           JE SHOW_GAME_OVER              
           JMP CHECK_TIME      
         
         SHOW_GAME_OVER:
          CALL GAME_OVER_MENU  
-        ;OldRange = (OldMax - OldMin)  
-        ;NewRange = (NewMax - NewMin)  
-        ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
-        
-		    
-		    ;DH contains second           
-		   ; MOV AL,DH
-		   ; MOV BL,5           
-		    ;5 is the result of old range(299)/new range(59)
-		   ; MUL BL
-		   ; MOV PLATFORM1_X,AX  
-		    ;DL is a number between 0 to 100   
-		   ; MOV DH,0
-		   ; MOV PLATFORM2_X,DX             ;we need platform 1_y to be between 0 and 99   
-		
-		    ;MOV AH,0
-		    ;MOV AL,DL
-		    ;MOV CL,10
-		    ;DIV CL   ;AH has the remainder
-		                
+       
+		               
             
   RET       
 MAIN ENDP   
+;---------------------------MOVE_PLATFORM2_DOWN----------------------;
+
+MOVE_PLATFORM2_DOWN PROC      
+    CMP PLATFORM2_Y,0B4h ;y of the first platform
+    JE STOP_MOVING
+    ADD PLATFORM2_Y,0Ah
+    ADD PLATFORM1_Y,0Ah 
+    ADD PLATFORM_NEW_Y,0Ah
+    RET                  
+    
+    STOP_MOVING: 
+        MOV MOVE_PAGE,0h  
+        
+        ;swap  platform1 values to the old platform2
+        MOV AX,PLATFORM2_X
+        MOV PLATFORM1_X,AX     
+        MOV PLATFORM1_Y,0B4h ;Change platform1 features to the second one  
+        ;reset new platform features
+        MOV PLATFORM_NEW_Y,0FF88h
+        ;change platform2 values to the new random platform
+        MOV AX,PLATFORM_NEW_X 
+        MOV PLATFORM2_X,AX   
+        MOV PLATFORM2_Y,1Eh      
+          
+    RET
+MOVE_PLATFORM2_DOWN ENDP
+
 
 
 ;---------------------------START_GAME----------------------;
 START_GAME PROC               
-    WAIT_FOR_KEY_MENU:
+    
     MOV AH,02h                       ;set cursor position
 	MOV BH,00h                       ;set page number
 	MOV DH,09h                       ;y 
@@ -147,13 +177,15 @@ START_GAME PROC
 	LEA DX,TEXT_MAINMENU_EXIT           ;give DX a pointer 
 	INT 21h  
 	
+   
+   WAIT_FOR_KEY_MENU:    
 	;waits for any key to press  
 	MOV AH,00h
     INT 16h    
     
-    CMP AL,'S'
+    CMP AL,'s'
     JE GO_TO_GAME    
-    CMP AL,'E'   
+    CMP AL,'e'   
     JE CALLING_EXIT
      
 	JMP WAIT_FOR_KEY_MENU 
@@ -162,15 +194,6 @@ START_GAME PROC
     GO_TO_GAME:
         RET
 START_GAME ENDP
-;---------------------------EXIT-PROGRAM----------------------;
-EXIT_PROGRAM PROC
- 	MOV AH,00h                   ;set the configuration to video mode
-	MOV AL,02h                   ;choose the video mode    (320*200)
-	INT 10h    					 ;execute the configuration 
-	MOV AH,4Ch 					 ;set the configuration 				
-	INT 21h    					 ;execute the configuration	
-
-EXIT_PROGRAM ENDP
 
 
 ;---------------------------MOVE_BALL----------------------;
@@ -221,10 +244,10 @@ CHECK_FOR_KEYBOARD PROC
     	MOV AH,00h ;check which key is being pressed
     	INT 16h    ;AL has the ascii code    
 	
-	    CMP AL,'J'
+	    CMP AL,'j'
 	    JE MOVE_BALL_LEFT  
 	
-	    CMP AL,'K'
+	    CMP AL,'k'
 	    JE MOVE_BALL_RIGHT
 	    RET     
 	
@@ -261,6 +284,67 @@ CHECK_FOR_KEYBOARD PROC
 	       	    MOV BALL_CENTER_X,AX 
        RET
 CHECK_FOR_KEYBOARD ENDP	    
+
+;---------------------------CHECK_FOR_COLLIDING----------------------;
+CHECK_FOR_COLLIDING PROC 
+      
+	 CMP BALL_DIRECTION,1    ;if the ball is going up collision does not affect
+	 JE  CHECK_PLATFORM1_COLLIDING  
+	 RET  ;if the direction equals to 0 ,then return
+	 
+	 ; Check if the ball is colliding with platform1
+	 ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
+	 ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
+	 
+     CHECK_PLATFORM1_COLLIDING:  
+		    
+	       MOV AX,PLATFORM1_X              ;the ball_x>platform_x
+		   CMP BALL_CENTER_X,AX
+	       JL  RETURN  ;if there's no collision check platform2
+	    	
+    	   ADD AX,PLATFORM_WIDTH          ;the ball_x<=platform_x+width
+		   CMP BALL_CENTER_X,AX
+    	   JG  RETURN  ;if there's no collision check platform2
+		
+		   MOV AX,BALL_CENTER_Y
+	       ADD AX,BALL_RADIUS
+	       MOV BX,PLATFORM1_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JL RETURN  ;if there's no collision check platform2   
+		   
+		   
+		   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
+	       SUB AX,BALL_RADIUS
+	       MOV BX,PLATFORM1_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JGE RETURN  ;if there's no collision check platform2   
+		   
+		   COLLIDED_1:
+		     MOV BALL_COLLIDED,1  ;the ball collides with the platform       
+		     MOV MOVE_PAGE,1         ;the upper platform should come down
+		     MOV BALL_DIRECTION,0     ;the direction changes to up   
+		     MOV CREATE_NEW_PLATFORM,1 ;create a new random platform 
+		       
+		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
+		     MOV BALL_VELOCITY_Y,AX   
+		     INC SCORE   
+		     CALL UPDATE_TEXT_SCORE
+		     RET     
+	
+	  RETURN:       
+	    RET              
+CHECK_FOR_COLLIDING ENDP   
+;---------------------------UPDATE_TEXT_SCORE----------------------;
+UPDATE_TEXT_SCORE  PROC 
+        XOR AX,AX
+		MOV AL,SCORE
+		ADD AL,30h                    
+		MOV [TEXT_PLAYER_SCORE],AL
+		
+		RET 
+UPDATE_TEXT_SCORE ENDP
 ;---------------------------CHANGE_VELOCITY----------------------;
 CHANGE_VELOCITY PROC 
     
@@ -269,7 +353,7 @@ CHANGE_VELOCITY PROC
     JL  DECREASE_SPEED_Y            ;if the velocity is negative, the ball is going up, we decrease (-15+1)
     ;else if it is zero
     INC BALL_VELOCITY_Y         ;If the velocity is zero the it is at top ,we make velocity=1
-    MOV DIRECTION,1             ;the ball is moving down
+    MOV BALL_DIRECTION,1             ;the ball is moving down
     RET
     INCREASE_SPEED_Y:
         INC BALL_VELOCITY_Y     ;
@@ -284,124 +368,6 @@ CHANGE_VELOCITY PROC
        RET
   RET
 CHANGE_VELOCITY ENDP  
-;---------------------------CHECK_FOR_COLLIDING----------------------;
-CHECK_FOR_COLLIDING PROC 
-      
-	 CMP DIRECTION,1    ;if the ball is going up collision does not affect
-	 JE  CHECK_PLATFORM1_COLLIDING  
-	 RET  ;if the direction equals to 0 ,then return
-	 
-	 ; Check if the ball is colliding with platform1
-	 ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
-	 ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
-	 
-     CHECK_PLATFORM1_COLLIDING:  
-		    
-	       MOV AX,PLATFORM1_X              ;the ball_x>platform_x
-		   CMP BALL_CENTER_X,AX
-	       JL  CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2
-	    	
-    	   ADD AX,PLATFORM_WIDTH          ;the ball_x<=platform_x+width
-		   CMP BALL_CENTER_X,AX
-    	   JG  CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2
-		
-		   MOV AX,BALL_CENTER_Y
-	       ADD AX,BALL_RADIUS
-	       MOV BX,PLATFORM1_Y
-	       SUB BX,PLATFORM_HEIGHT
-		   CMP AX,BX
-		   JL CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
-		   
-		   
-		   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
-	       SUB AX,BALL_RADIUS
-	       MOV BX,PLATFORM1_Y
-	       SUB BX,PLATFORM_HEIGHT
-		   CMP AX,BX
-		   JGE CHECK_PLATFORM2_COLLIDING  ;if there's no collision check platform2   
-		   
-		   COLLIDED_1:
-		     MOV BALL_COLLIDED,1  ;the ball collides with the platform       
-		     MOV MOVE_PAGE,1
-		     MOV DIRECTION,0     ;the direction changes to up      
-		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
-		     MOV BALL_VELOCITY_Y,AX   
-		     INC SCORE
-		     RET     
-		        
-	  CHECK_PLATFORM2_COLLIDING:
-
-		    
-	       MOV AX,PLATFORM2_X
-		   CMP BALL_CENTER_X,AX
-	       JL  RETURN  ;if there's no collision go to end part
-
-    	   ADD AX,PLATFORM_WIDTH
-		   CMP BALL_CENTER_X,AX
-    	   JG  RETURN  ;if there's no collision go to end part  
-    	   
-    	   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
-	       SUB AX,BALL_RADIUS
-	       MOV BX,PLATFORM2_Y
-	       SUB BX,PLATFORM_HEIGHT
-		   CMP AX,BX
-		   JGE RETURN  ;if there's no collision check platform2
-		     
-		   MOV AX,BALL_CENTER_Y
-	       ADD AX,BALL_RADIUS
-	       MOV BX,PLATFORM2_Y
-	       SUB BX,PLATFORM_HEIGHT
-	       CMP AX,BX
-	       JL RETURN  ;if there's no collision go to end part 
-		   
-	       COLLIDED_2: 
-	         MOV BALL_COLLIDED,1    
-	         MOV DIRECTION,0  ;the direction changes to up 
-	        ; MOV NEXT_PAGE,1 ;we should change the 2 platforms randomly as if it is a new page
-             MOV AX,ORIGINAL_BALL_VELOCITY_Y   
-		     MOV BALL_VELOCITY_Y,AX 
-	         INC SCORE 
-	  RETURN:       
-	    RET              
-CHECK_FOR_COLLIDING ENDP
-;---------------------------GAME_OVER_MENU----------------------;
-GAME_OVER_MENU PROC
-    CALL CLEAR_SCREEN
-    MOV AH,02h                       ;set cursor position
-	MOV BH,00h                       ;set page number
-	MOV DH,06h                       ;set row 
-	MOV DL,04h						 ;set column
-	INT 10h							 
-	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
-	LEA DX,TEXT_GAME_OVER           ;give DX a pointer 
-	INT 21h
-	;waits for any key to press  
-	MOV AH,00h
-    INT 16h  
-  RET	 
-GAME_OVER_MENU ENDP
-;---------------------------CLEAR_SCREEN----------------------;
-CLEAR_SCREEN PROC               ;clear the screen by restarting the video mode
-	
-	MOV AH,00h                   ;set the configuration to video mode
-	MOV AL,0Dh                   ;choose the video mode    (320*200)
-	INT 10h    					 ;execute the configuration 
-	MOV AH,0Bh 					 ;set the configuration
-	MOV BH,00h 					 ;to the background color
-	MOV BL,00h 					 ;choose black as background color
-	INT 10h    					 ;execute the configuration	
-	                      
-  RET		
-CLEAR_SCREEN ENDP
-
-    
-;--------------------------DRAW_PIXEL--------------------------;  
-DRAW_PIXEL_INIT PROC NEAR
-    MOV AH, 0Ch
-    MOV BH, 00h
-    INT 10h
-    RET
-DRAW_PIXEL_INIT ENDP
 ;--------------------------DRAW_BALL--------------------------;
 DRAW_BALL PROC NEAR
     MOV DX, BALL_RADIUS
@@ -497,8 +463,35 @@ DRAW_PLATFORM PROC
 			SUB AX,PLATFORM2_Y
 			CMP AX,PLATFORM_HEIGHT
 			JNG DRAW_PLATFORM2_HORIZONTAL
-			
+		
+		;new Random platform      
+		
+		
+		MOV CX,PLATFORM_NEW_X 			 ;set the initial column (X)
+		MOV DX,PLATFORM_NEW_Y 			 ;set the initial line (Y)     
+		CMP DX,0
+		JGE DRAW_PLATFORM_NEW_HORIZONTAL
 		RET
+		DRAW_PLATFORM_NEW_HORIZONTAL:   
+	    	MOV AL,09h 					 ;choose white as color
+			CALL DRAW_PIXEL_INIT
+			
+			INC CX     				 	 ;CX = CX + 1
+			MOV AX,CX  
+	        SUB AX,PLATFORM_NEW_X       			 ;CX - PLATFORM1_X > PADDLE_WIDTH 
+			CMP AX,PLATFORM_WIDTH          
+			JNG DRAW_PLATFORM_NEW_HORIZONTAL
+			
+			MOV CX,PLATFORM_NEW_X 		 ;the CX register goes back to the initial column
+			INC DX       				 ;we advance one line
+			
+			MOV AX,DX            	     
+			SUB AX,PLATFORM_NEW_Y
+			CMP AX,PLATFORM_HEIGHT
+			JNG DRAW_PLATFORM_NEW_HORIZONTAL
+			
+		RET 
+		
 	DRAW_PLATFORM ENDP
 ;--------------------------DRAW_FULL_CIRCLE--------------------------;
 DRAW_POINTS PROC NEAR      
@@ -563,7 +556,66 @@ DRAW_POINTS PROC NEAR
    
  RET
 DRAW_POINTS ENDP
+;---------------------------CLEAR_SCREEN----------------------;
+CLEAR_SCREEN PROC               ;clear the screen by restarting the video mode
+	
+	MOV AH,00h                   ;set the configuration to video mode
+	MOV AL,0Dh                   ;choose the video mode    (320*200)
+	INT 10h    					 ;execute the configuration 
+	MOV AH,0Bh 					 ;set the configuration
+	MOV BH,00h 					 ;to the background color
+	MOV BL,00h 					 ;choose black as background color
+	INT 10h    					 ;execute the configuration	
+	                      
+  RET		
+CLEAR_SCREEN ENDP   
+;--------------------------DRAW_PIXEL--------------------------;  
+DRAW_PIXEL_INIT PROC NEAR
+    MOV AH, 0Ch
+    MOV BH, 00h
+    INT 10h
+    RET
+DRAW_PIXEL_INIT ENDP  
+;---------------------------DRAW_SCORE----------------------;
+DRAW_SCORE PROC
+    MOV AH,02h                       ;set cursor position
+	MOV BH,00h                       ;set page number
+	MOV DH,01h                       ;y row
+	MOV DL,0EEh						 ;x col
+	INT 10h
+								 
+	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
+	LEA DX,TEXT_PLAYER_SCORE           ;give DX a pointer 
+	INT 21h
+	  
+  RET	 
+DRAW_SCORE ENDP 
+;---------------------------GAME_OVER_MENU----------------------;
+GAME_OVER_MENU PROC
+    CALL CLEAR_SCREEN
+    MOV AH,02h                       ;set cursor position
+	MOV BH,00h                       ;set page number
+	MOV DH,0Ah                       ;y
+	MOV DL,0Fh						 ;x
+	INT 10h							 
+	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
+	LEA DX,TEXT_GAME_OVER           ;give DX a pointer 
+	INT 21h
+	;waits for any key to press  
+	MOV AH,00h
+    INT 16h  
+  RET	 
+GAME_OVER_MENU ENDP    
 
+;---------------------------EXIT-PROGRAM----------------------;
+EXIT_PROGRAM PROC
+ 	MOV AH,00h                   ;set the configuration to video mode
+	MOV AL,02h                   ;choose the video mode    (320*200)
+	INT 10h    					 ;execute the configuration 
+	MOV AH,4Ch 					 ;set the configuration 				
+	INT 21h    					 ;execute the configuration	
+
+EXIT_PROGRAM ENDP
 
 
 END MAIN
