@@ -1,3 +1,4 @@
+
 .MODEL SMALL
 .STACK 64  
 
@@ -7,7 +8,7 @@
    TEXT_MAINMENU_PLAY  DB 'PRESS S TO PLAY THE GAME','$'  
    TEXT_MAINMENU_EXIT  DB 'PRESS E TO EXIT THE GAME','$'
    TEXT_GAME_OVER DB 'GAME OVER','$'  
-   TEXT_PLAYER_SCORE DB '0','$'
+   TEXT_PLAYER_SCORE DB  '0',' ',' ','$'
 
    MOVE_PAGE DB 0  
    CREATE_NEW_PLATFORM DB 0
@@ -24,7 +25,7 @@
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
    BALL_CENTER_Y DW 0B9h                 ;current Y position (line) of the ball     
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is -16              V collision=-15
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF2h         ;original velocity is -16              V collision=-15
    BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
    BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-15
    BALL_DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0   
@@ -46,8 +47,7 @@
    
    PLATFORM_NEW_X DW ?   ;x=random     
    PLATFORM_NEW_Y DW 0FF88h  ;
-   
-   SCORE DB 0
+   SCORE DB 0h
    TIME_AUX DB 0 
    
 ;---------------------------------MAIN CODE-----------------------------;
@@ -79,8 +79,8 @@ MAIN PROC FAR
                  ;new new platform's x should be in range of [0,250]
 		         ;old range=9 ,new range=250 ,new_val=x*(250/9=25)
 		         ;DL is a number between 0 to 100   
-		         MOV DH,0
-		         MOV AH,00h  
+		         ;MOV DH,0
+		         MOV AH,00h
 		         MOV AL,DL
 		         MOV BL,0Ah
 		         DIV BL   ;AH has the reaminder   
@@ -326,24 +326,45 @@ CHECK_FOR_COLLIDING PROC
 		     MOV MOVE_PAGE,1         ;the upper platform should come down
 		     MOV BALL_DIRECTION,0     ;the direction changes to up   
 		     MOV CREATE_NEW_PLATFORM,1 ;create a new random platform 
-		       
 		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
 		     MOV BALL_VELOCITY_Y,AX   
-		     INC SCORE   
+		     ADD SCORE,1      
 		     CALL UPDATE_TEXT_SCORE
-		     RET     
-	
 	  RETURN:       
-	    RET              
+	         RET              
 CHECK_FOR_COLLIDING ENDP   
-;---------------------------UPDATE_TEXT_SCORE----------------------;
+;---------------------------UPDATE_TEXT_SCORE----------------------; 
+; as we assume the maximum score is 99 so we do not need a stack
 UPDATE_TEXT_SCORE  PROC 
         XOR AX,AX
-		MOV AL,SCORE
-		ADD AL,30h                    
-		MOV [TEXT_PLAYER_SCORE],AL
-		
-		RET 
+		MOV AL,SCORE  
+		MOV BL,0Ah    
+	    XOR DX,DX
+	    MOV CX,0  
+	    MOV SI ,OFFSET TEXT_PLAYER_SCORE  
+    label1:
+        ;operand=BL=10 and a byte so AL=AX/operan
+        ;AH=remainder           
+         DIV BL       
+         MOV DL,AH       
+         PUSH DX  ;DX is the las digit 
+         INC CX
+         CMP AL,0      ; if ax is zero
+         MOV AH,0      
+         JNE label1
+         MOV BX,0
+         JMP print1
+    print1: 
+        CMP CX,0
+        JE bye  
+        DEC CX    
+        POP DX
+        ADD DX,30h       ;add 48 so that it represents the ASCII value of digit     
+		MOV [SI+BX],DL 
+		INC BX  
+        JMP print1     
+        bye:      
+	    	RET 
 UPDATE_TEXT_SCORE ENDP
 ;---------------------------CHANGE_VELOCITY----------------------;
 CHANGE_VELOCITY PROC 
@@ -581,11 +602,11 @@ DRAW_SCORE PROC
     MOV AH,02h                       ;set cursor position
 	MOV BH,00h                       ;set page number
 	MOV DH,01h                       ;y row
-	MOV DL,0EEh						 ;x col
+	MOV DL,0EBh						 ;x col
 	INT 10h
 								 
-	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
-	LEA DX,TEXT_PLAYER_SCORE           ;give DX a pointer 
+	MOV AH,09h                         ;WRITE STRING TO STANDARD OUTPUT
+	MOV DX,OFFSET TEXT_PLAYER_SCORE           ;give DX a pointer 
 	INT 21h
 	  
   RET	 
@@ -615,7 +636,9 @@ EXIT_PROGRAM PROC
 	MOV AH,4Ch 					 ;set the configuration 				
 	INT 21h    					 ;execute the configuration	
 
-EXIT_PROGRAM ENDP
+EXIT_PROGRAM ENDP  
+;-------------------------Convert_number_to_ascii-----------------------;
+ 
 
 
 END MAIN
