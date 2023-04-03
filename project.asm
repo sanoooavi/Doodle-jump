@@ -1,3 +1,4 @@
+
 .MODEL SMALL
 .STACK 64  
 
@@ -7,26 +8,28 @@
    TEXT_MAINMENU_PLAY  DB 'PRESS S TO PLAY THE GAME','$'  
    TEXT_MAINMENU_EXIT  DB 'PRESS E TO EXIT THE GAME','$'
    TEXT_GAME_OVER DB 'GAME OVER','$'  
-   TEXT_PLAYER_SCORE DB '0','$'
-
+   TEXT_PLAYER_SCORE DB  '0',' ',' ','$'
+   
+   
+   
    MOVE_PAGE DB 0  
    CREATE_NEW_PLATFORM DB 0
    BALL_COLLIDED DB 0
    GAME_ACTIVE DB 1                     ;is the game active?      
   
    ;Window features        
-   WINDOW_WIDTH DW 140h                 ;the width of the window (320 pixels)
-   WINDOW_HEIGHT DW 0C8h               ;the height of the window (200 pixels)     
+   WINDOW_WIDTH DW 140h                 ;the width of the window (320 pixels)  16   8
+   WINDOW_HEIGHT DW 0C8h               ;the height of the window (200 pixels)  10   5
    
    
    ;Ball features
-   ;the ball starts at y=188 and goes up    
+   ;Ball starts at y=188 and goes up    
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
    BALL_CENTER_Y DW 0B9h                 ;current Y position (line) of the ball     
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF3h         ;original velocity is -16              V collision=-15
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is -16              V collision=-15
    BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
-   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-15
+   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-17
    BALL_DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0   
   
    ;Drawing ball features 
@@ -35,35 +38,47 @@
    P DW 0
 
  
-   ;PLATFORMS    
+   ;PLATFORMS MAIN FEATURES   
    PLATFORM_WIDTH DW 50
-   PLATFORM_HEIGHT DW 5  
+   PLATFORM_HEIGHT DW 5    
+   
+   ;PLATFORM1 FEATURES
    PLATFORM1_X DW 20H     ;x=random
-   PLATFORM1_Y DW 0B4H    ;y=180  
+   PLATFORM1_Y DW 0B4H    ;y=180
+     
    ;the second platform should be upper
    PLATFORM2_X DW 64H   ;x=random     ;The platforms can start between 0 to 250
    PLATFORM2_Y DW 1EH  ;y=30
    
+   ;BROKEN PLATFORM FEATURES
+   SHOW_BROKEN_PLATFORM DB 1    
+   
+   ;PLATFORM_BROKEN_SUBS_X DW 50H     ;x=random
+   ;PLATFORM_BROKEN_SUBS_Y DW 0FFE7h    ;y=125   
+   
+   PLATFORM_BROKEN_X DW 50H     ;x=random
+   PLATFORM_BROKEN_Y DW 78h    ;y=120  
+   
    PLATFORM_NEW_X DW ?   ;x=random     
    PLATFORM_NEW_Y DW 0FF88h  ;
-   
-   SCORE DB 0
+   SCORE DB 0h
    TIME_AUX DB 0 
 
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;TEST;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-   PLATFORM_BROKEN_COLOR DB 01H
+   BUG_WIDTH DW 04h              ;default bug width
    
-   IS_BROKEN DB 0
-   IS_BROKEN_HIT DB 0
-   COIL_BALL_VELOCITY_Y DW 0FFF0h
+   BUG_X DW 20h                  ;current X position (column) of the bug 
+   BUG_Y DW 19h                ;current Y position (line) of the bug
+   
+   BUG_VOLACITY_X DW 06h
+   BUG_VOLACITY_Y DW 00h
 
-   PLATFORM_COIL_COLOR DB 0EH
-   PLATFORM_NEW_COLOR DB 09h
-   PLATFORM1_COLOR DB 09h
-   PLATFORM2_COLOR DB 09h
-   IS_NEW_COIL DB 0
-   IS_COIL_FINISH DB 0
+   BUG_MOVE DW 0
+
+
+   HIT_BUG DB 0
+      
+   
+
    
 ;---------------------------------MAIN CODE-----------------------------;
 .CODE
@@ -80,50 +95,41 @@ MAIN PROC FAR
         MOV AH,2Ch                   ;get the system time
 		INT 21h    					 ;CH = hour CL = minute DH = second DL = 1/100 seconds                    
 		CMP TIME_AUX,DL
-		JE CHECK_TIME    
+		JE  CHECK_TIME    
 		MOV TIME_AUX,DL 
+
 		CMP CREATE_NEW_PLATFORM,1
-		JE USE_RANDOM            
-		JMP CHECK_MOVING       
+		JE  USE_RANDOM            
+		JMP CHECK_MOVING 
+
 		
-		USE_RANDOM:
-                
-                 MOV DH,0
-		         MOV AH,00h  
-		         MOV AL,DL
-		         MOV BL,06h
-		         DIV BL   ;AH has the reaminder
-                 
-                 CMP AH, 0
-                 JNE CONTINUE_RANDOM
-                    mov IS_NEW_COIL, 1
+		USE_RANDOM: 
 
-                CONTINUE_RANDOM:
 
-		         MOV CREATE_NEW_PLATFORM,0
-		         ;OldRange = (OldMax - OldMin)  
-                 ;NewRange = (NewMax - NewMin)  
-                 ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
-                 ;new new platform's x should be in range of [0,250]
-		         ;old range=9 ,new range=250 ,new_val=x*(250/9=25)
-		         ;DL is a number between 0 to 100   
-		         MOV DH,0
-		         MOV AH,00h  
-		         MOV AL,DL
-		         MOV BL,0Ah
-		         DIV BL   ;AH has the reaminder   
-		         MOV AL,AH
-		         MOV BL,1Bh ;BL=27
-		         MUL BL   ;AX has the reult (between 0 to 250)     
-		         MOV PLATFORM_NEW_X,AX
-		         MOV PLATFORM_NEW_Y,0FF88h ;not in the page
+					 MOV CREATE_NEW_PLATFORM,0
+					 ;OldRange = (OldMax - OldMin)  
+					 ;NewRange = (NewMax - NewMin)  
+					 ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
+					 ;new new platform's x should be in range of [0,250]
+					 ;old range=9 ,new range=250 ,new_val=x*(250/9=25)
+					 MOV AH,00h
+					 MOV AL,DL
+					 MOV BL,0Ah
+					 DIV BL   ;AH has the reaminder   
+					 MOV AL,AH
+					 MOV BL,1Bh ;BL=27
+					 MUL BL   ;AX has the reult (between 0 to 250)     
+					 MOV PLATFORM_NEW_X,AX
+					 MOV PLATFORM_NEW_Y,0FF88h ;not in the page
 		        
 		CHECK_MOVING:  
              CMP MOVE_PAGE,1     ;check for moving
              JNE PRINTING_PLAY
 	    	
 	    	MOVEMENT:
+              
 		        CALL MOVE_PLATFORM2_DOWN 
+                
 		    
 		PRINTING_PLAY:       
           CALL CLEAR_SCREEN                      
@@ -131,6 +137,10 @@ MAIN PROC FAR
           CALL DRAW_BALL
           CALL DRAW_PLATFORM  
           CALL DRAW_SCORE
+          MOV BUG_VOLACITY_Y, 00h
+		  CALL BUG_MOVING
+
+		  CALL DRAW_BUG
            
           CMP GAME_ACTIVE,00h
           JE SHOW_GAME_OVER              
@@ -148,34 +158,50 @@ MAIN ENDP
 MOVE_PLATFORM2_DOWN PROC      
     CMP PLATFORM2_Y,0B4h ;y of the first platform
     JE STOP_MOVING
-    ADD PLATFORM2_Y,0Ah
+    ADD PLATFORM2_Y,0Ah 
     ADD PLATFORM1_Y,0Ah 
-    ADD PLATFORM_NEW_Y,0Ah
-    RET                  
+    ADD PLATFORM_NEW_Y,0Ah  
+
+    ;BROKEN PLATFORM MOVING   
+    ADD PLATFORM_BROKEN_Y,0Dh   ;Add 13 to the y  
+    CMP PLATFORM_BROKEN_Y,0B9h  ;Y=185
+    JE CHANGE_FROM_UP  
+    RET
+    CHANGE_FROM_UP: 
+       MOV SHOW_BROKEN_PLATFORM,1 
+       MOV PLATFORM_BROKEN_Y,0FFF6h     ;y=-10      
+       MOV AH,2Ch                   ;get the system time
+	   INT 21h    					 ;CH = hour CL = minute DH = second DL = 1/100 seconds     
+       MOV AH,00h
+	   MOV AL,DL  
+	   MOV BL,03h
+	   MUL BL   
+	   CMP AX,0FAh ;250
+	   JB  CNV      
+	   MAKE_LESS_BOUNDRY:
+		    SUB AX,25h    
+	   CNV:    
+	   MOV PLATFORM_BROKEN_X,AX  
+     
+    RET  
+
     
     STOP_MOVING: 
         MOV MOVE_PAGE,0h  
-        
         ;swap  platform1 values to the old platform2
         MOV AX,PLATFORM2_X
         MOV PLATFORM1_X,AX     
-        MOV PLATFORM1_Y,0B4h ;Change platform1 features to the second one 
-
-        MOV Ah, PLATFORM2_COLOR
-        MOV PLATFORM1_COLOR, Ah
-        MOV PLATFORM2_COLOR, 09h
-
+        MOV PLATFORM1_Y,0B4h ;Change platform1 features to the second one  
         ;reset new platform features
         MOV PLATFORM_NEW_Y,0FF88h
         ;change platform2 values to the new random platform
         MOV AX,PLATFORM_NEW_X 
         MOV PLATFORM2_X,AX   
-        MOV PLATFORM2_Y,1Eh
-
-        MOV Ah, PLATFORM_NEW_COLOR
-        MOV PLATFORM2_COLOR, Ah
-        MOV PLATFORM_NEW_COLOR, 09h      
-          
+        MOV PLATFORM2_Y,1Eh 
+		
+			
+       
+ 
     RET
 MOVE_PLATFORM2_DOWN ENDP
 
@@ -260,13 +286,14 @@ MOVE_BALL PROC
 	CALL CHECK_FOR_KEYBOARD    
     CALL CHECK_FOR_COLLIDING 
     CMP BALL_COLLIDED,1             ;check if the ball collided with one of the platforms
-    JE END_PART                    ;if did then we do not change the velocity                   
+    JE END_PART                    ;if did then we do not change the velocity                  
     CALL CHANGE_VELOCITY         
     END_PART: 
         MOV BALL_COLLIDED,00h
         RET  
     NEXT_PAGE:
         MOV BALL_CENTER_Y,0BCH
+
         RET
 MOVE_BALL ENDP  
 ;---------------------------CHECK_FOR_KEYBOARD----------------------;
@@ -324,16 +351,90 @@ CHECK_FOR_KEYBOARD ENDP
 
 ;---------------------------CHECK_FOR_COLLIDING----------------------;
 CHECK_FOR_COLLIDING PROC 
+    ; check for bug colliding
+
+    CHECK_BUG_COLLIDING: 
+        ; LEFT
+        MOV AX,BUG_X
+        MOV BX, BALL_CENTER_X
+        ADD BX, BALL_RADIUS
+        CMP BX, AX
+        JL COLIDING_CONTINUE
+
+        ; RIGHT
+        MOV AX,BUG_X
+        ADD AX, BUG_WIDTH
+        MOV BX, BALL_CENTER_X
+        SUB BX, BALL_RADIUS
+        CMP BX, AX
+        JG COLIDING_CONTINUE
+
+        ; TOP
+        MOV AX,BUG_Y
+        MOV BX, BALL_CENTER_Y
+        ADD BX, BALL_RADIUS
+        CMP BX, AX
+        JL COLIDING_CONTINUE
+
+        ; BOTTOM
+        MOV AX,BUG_Y
+        ADD AX, BUG_WIDTH
+        MOV BX, BALL_CENTER_Y
+        SUB BX, BALL_RADIUS
+        CMP BX, AX
+        JG COLIDING_CONTINUE
+
+        ; HITTED
+        MOV HIT_BUG, 1
+
+        MOV GAME_ACTIVE,00h 
+        RET
+
+     COLIDING_CONTINUE:
+
       
 	 CMP BALL_DIRECTION,1    ;if the ball is going up collision does not affect
-	 JE  CHECK_PLATFORM1_COLLIDING  
+	 JE  CHECK_PLATFORM_BROKEN_COLLIDING  
 	 RET  ;if the direction equals to 0 ,then return
 	 
 	 ; Check if the ball is colliding with platform1
 	 ; If BALL_Y_CENTER-BALL_RADIUS<=PLATFORM1_Y+PLATFROM_HEIGHT
-	 ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH   
+	 ; AND BALL_X_CENTER>=PLATFORM_1_X AND BALL_X_CENTER<=PLATFORM1_X+WIDTH 
 	 
-     CHECK_PLATFORM1_COLLIDING:  
+	 
+	   
+	 CMP SHOW_BROKEN_PLATFORM,0
+	 JE CHECK_PLATFORM1_COLLIDING
+
+	 CHECK_PLATFORM_BROKEN_COLLIDING:  
+	       MOV AX,PLATFORM_BROKEN_X              ;the ball_x>platform_x
+		   CMP BALL_CENTER_X,AX
+	       JL  CHECK_PLATFORM1_COLLIDING  ;if there's no collision check platform2
+	    	
+    	   ADD AX,PLATFORM_WIDTH          ;the ball_x<=platform_x+width
+		   CMP BALL_CENTER_X,AX
+    	   JG  CHECK_PLATFORM1_COLLIDING  ;if there's no collision check platform2
+		
+		   MOV AX,BALL_CENTER_Y
+	       ADD AX,BALL_RADIUS
+	       MOV BX,PLATFORM_BROKEN_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JL CHECK_PLATFORM1_COLLIDING  ;if there's no collision check platform2   
+		   
+		   
+		   MOV AX,BALL_CENTER_Y          ;maxiumim of the ball should also be more than maximum of the platform
+	       SUB AX,BALL_RADIUS
+	       MOV BX,PLATFORM_BROKEN_Y
+	       SUB BX,PLATFORM_HEIGHT
+		   CMP AX,BX
+		   JGE CHECK_PLATFORM1_COLLIDING  ;if there's no collision check platform2   
+		   
+		   COLLIDED_BROKEN:
+		        MOV SHOW_BROKEN_PLATFORM,0
+               
+	 
+     CHECK_PLATFORM1_COLLIDING: ;random x 
 		    
 	       MOV AX,PLATFORM1_X              ;the ball_x>platform_x
 		   CMP BALL_CENTER_X,AX
@@ -363,39 +464,47 @@ CHECK_FOR_COLLIDING PROC
 		     MOV MOVE_PAGE,1         ;the upper platform should come down
 		     MOV BALL_DIRECTION,0     ;the direction changes to up   
 		     MOV CREATE_NEW_PLATFORM,1 ;create a new random platform 
-		       
-		       
-		     INC SCORE   
+		     MOV AX,ORIGINAL_BALL_VELOCITY_Y   
+		     MOV BALL_VELOCITY_Y,AX  
+		     ADD SCORE,1      
+			 ;random 
 		     CALL UPDATE_TEXT_SCORE
 
-             ;MOV IS_BROKEN, 0
-             ;MOV IS_BROKEN_HIT, 1
-             if_coil:
-                CMP PLATFORM1_COLOR, 0EH
-                MOV PLATFORM1_COLOR, 09H
-                JE COLLIDED_CONTINEU
-
-             MOV AX,ORIGINAL_BALL_VELOCITY_Y   
-		     MOV BALL_VELOCITY_Y,AX 
-             
-             RET
-
-             COLLIDED_CONTINEU:
-             MOV AX, 0FFF0h  
-		     MOV BALL_VELOCITY_Y,AX 
-		     RET     
-	
 	  RETURN:       
-	    RET              
+	         RET              
 CHECK_FOR_COLLIDING ENDP   
-;---------------------------UPDATE_TEXT_SCORE----------------------;
+;---------------------------UPDATE_TEXT_SCORE----------------------; 
+; as we assume the maximum score is 99 so we do not need a stack
 UPDATE_TEXT_SCORE  PROC 
         XOR AX,AX
-		MOV AL,SCORE
-		ADD AL,30h                    
-		MOV [TEXT_PLAYER_SCORE],AL
-		
-		RET 
+		MOV AL,SCORE  
+		MOV BL,0Ah    
+	    XOR DX,DX
+	    MOV CX,0  
+	    MOV SI ,OFFSET TEXT_PLAYER_SCORE  
+    label1:
+        ;operand=BL=10 and a byte so AL=AX/operan
+        ;AH=remainder           
+         DIV BL       
+         MOV DL,AH       
+         PUSH DX  ;DX is the las digit 
+         INC CX
+         CMP AL,0      ; if ax is zero
+         MOV AH,0      
+         JNE label1
+         MOV BX,0
+         JMP print1
+    print1: 
+        CMP CX,0
+        JE bye  
+        DEC CX    
+        POP DX
+        ADD DX,30h       ;add 48 so that it represents the ASCII value of digit     
+		MOV [SI+BX],DL 
+		INC BX  
+        JMP print1     
+        bye:      
+	    	RET 
 UPDATE_TEXT_SCORE ENDP
 ;---------------------------CHANGE_VELOCITY----------------------;
 CHANGE_VELOCITY PROC 
@@ -406,6 +515,12 @@ CHANGE_VELOCITY PROC
     ;else if it is zero
     INC BALL_VELOCITY_Y         ;If the velocity is zero the it is at top ,we make velocity=1
     MOV BALL_DIRECTION,1             ;the ball is moving down
+
+    ; BUG MOVING
+    MOV BUG_MOVE, 1
+    MOV BUG_X, 20H
+    MOV BUG_Y, 19H
+
     RET
     INCREASE_SPEED_Y:
         INC BALL_VELOCITY_Y     ;
@@ -469,14 +584,14 @@ DRAW_BALL PROC NEAR
 DRAW_BALL ENDP       
 ;--------------------------DRAW_PLATFROM--------------------------;
 DRAW_PLATFORM PROC
+         
 		;Platform1
 		
 		MOV CX,PLATFORM1_X 			 ;set the initial column (X)
 		MOV DX,PLATFORM1_Y 			 ;set the initial line (Y)
 		
 		DRAW_PLATFORM1_HORIZONTAL:   
-	        MOV AL,PLATFORM1_COLOR
-
+	    	MOV AL,09h 					 ;choose white as color
 			CALL DRAW_PIXEL_INIT
 			
 			INC CX     				 	 ;CX = CX + 1
@@ -499,11 +614,8 @@ DRAW_PLATFORM PROC
 		MOV DX,PLATFORM2_Y 			 ;set the initial line (Y)
 		
 	
-		DRAW_PLATFORM2_HORIZONTAL:
-            
-
-	    	MOV AL,PLATFORM2_COLOR 						 ;choose white as color
-
+		DRAW_PLATFORM2_HORIZONTAL:   
+	    	MOV AL,09h 					 ;choose white as color
 			CALL DRAW_PIXEL_INIT
 			
 			INC CX     				 	 ;CX = CX + 1
@@ -520,40 +632,62 @@ DRAW_PLATFORM PROC
 			CMP AX,PLATFORM_HEIGHT
 			JNG DRAW_PLATFORM2_HORIZONTAL
 		
-		;new Random platform      
 		
+		CMP SHOW_BROKEN_PLATFORM,0
+		JE  RANDOM_PLATFORM   
 		
-		MOV CX,PLATFORM_NEW_X 			 ;set the initial column (X)
-		MOV DX,PLATFORM_NEW_Y 			 ;set the initial line (Y)     
-		CMP DX,0
-		JGE DRAW_PLATFORM_NEW_HORIZONTAL
-		RET
-		DRAW_PLATFORM_NEW_HORIZONTAL: 
-        MOV AL, PLATFORM_NEW_COLOR
-         IF_NEW_IS_COIL: 
-            CMP IS_NEW_COIL, 1
-            MOV IS_NEW_COIL, 0
-            JNE CONTINUE_DRAW
-            MOV PLATFORM_NEW_COLOR, 0EH
-            MOV AL,PLATFORM_NEW_COLOR 						 ;choose white as color
-
-            CONTINUE_DRAW:     
-	    					 ;choose white as color
+		;BROKEN PLATFORM
+		MOV CX,PLATFORM_BROKEN_X 			 ;set the initial column (X)
+		MOV DX,PLATFORM_BROKEN_Y 			 ;set the initial line (Y)     
+		
+		DRAW_PLATFORM_BROKEN_HORIZONTAL:   
+	    	MOV AL,0Ch 					 ;choose white as color
 			CALL DRAW_PIXEL_INIT
 			
 			INC CX     				 	 ;CX = CX + 1
 			MOV AX,CX  
-	        SUB AX,PLATFORM_NEW_X       			 ;CX - PLATFORM1_X > PADDLE_WIDTH 
+	        SUB AX,PLATFORM_BROKEN_X       			 ;CX - PLATFORM1_X > PADDLE_WIDTH 
 			CMP AX,PLATFORM_WIDTH          
-			JNG DRAW_PLATFORM_NEW_HORIZONTAL
+			JNG DRAW_PLATFORM_BROKEN_HORIZONTAL
 			
-			MOV CX,PLATFORM_NEW_X 		 ;the CX register goes back to the initial column
+			MOV CX,PLATFORM_BROKEN_X 		 ;the CX register goes back to the initial column
 			INC DX       				 ;we advance one line
 			
 			MOV AX,DX            	     
-			SUB AX,PLATFORM_NEW_Y
+			SUB AX,PLATFORM_BROKEN_Y
 			CMP AX,PLATFORM_HEIGHT
-			JNG DRAW_PLATFORM_NEW_HORIZONTAL
+			JNG DRAW_PLATFORM_BROKEN_HORIZONTAL
+			
+		
+		;new Random platform      
+		RANDOM_PLATFORM:
+		
+	    	MOV CX,PLATFORM_NEW_X 			 ;set the initial column (X)
+		    MOV DX,PLATFORM_NEW_Y 			 ;set the initial line (Y)     
+		    CMP DX,0
+	    	JGE DRAW_PLATFORM_NEW_HORIZONTAL
+		    RET
+	    	DRAW_PLATFORM_NEW_HORIZONTAL:   
+	        	MOV AL,09h 					 ;choose white as color
+			    CALL DRAW_PIXEL_INIT
+			
+			    INC CX     				 	 ;CX = CX + 1
+			    MOV AX,CX  
+	            SUB AX,PLATFORM_NEW_X       			 ;CX - PLATFORM1_X > PADDLE_WIDTH 
+			    CMP AX,PLATFORM_WIDTH          
+			    JNG DRAW_PLATFORM_NEW_HORIZONTAL
+			
+			    MOV CX,PLATFORM_NEW_X 		 ;the CX register goes back to the initial column
+		    	INC DX       				 ;we advance one line
+			
+			    MOV AX,DX            	     
+			    SUB AX,PLATFORM_NEW_Y
+			    CMP AX,PLATFORM_HEIGHT
+			    JNG DRAW_PLATFORM_NEW_HORIZONTAL  
+			
+			
+	    	
+	
 			
 		RET 
 		
@@ -621,7 +755,36 @@ DRAW_POINTS PROC NEAR
    
  RET
 DRAW_POINTS ENDP
+;-----------------------------DRAW_BUG----------------------------------;
+DRAW_BUG PROC NEAR
+
+	MOV CX,BUG_X;set the initial column (X)
+	MOV DX,BUG_Y;set the initial line (Y)	  
+				
+	DRAW_BUG_HORIZONTAL:
+		MOV AH,0Ch;set the configuration to writing a pixel
+		MOV AL,0Ah;choose green as color
+		MOV BH,00h;set the page number
+		INT 10h   ;execute the configuration
+					
+		INC CX    ;CX = CX + 1
+		MOV AX,CX          ;CX - BUG_X > BUG_WIDTH 
+		SUB AX,BUG_X
+		CMP AX,BUG_WIDTH
+		JNG DRAW_BUG_HORIZONTAL
+					
+		MOV CX,BUG_X ;the CX register goes back to the initial column      
+		INC DX        ;we advanced one line 
+				   
+		MOV AX,DX     ;DX - BUG_Y > PADDLE_HEIGHT 
+		SUB AX,BUG_Y
+		CMP AX,BUG_WIDTH
+		JNG DRAW_BUG_HORIZONTAL
+	RET
+DRAW_BUG ENDP
+	
 ;---------------------------CLEAR_SCREEN----------------------;
+
 CLEAR_SCREEN PROC               ;clear the screen by restarting the video mode
 	
 	MOV AH,00h                   ;set the configuration to video mode
@@ -646,11 +809,11 @@ DRAW_SCORE PROC
     MOV AH,02h                       ;set cursor position
 	MOV BH,00h                       ;set page number
 	MOV DH,01h                       ;y row
-	MOV DL,0EEh						 ;x col
+	MOV DL,0EBh						 ;x col
 	INT 10h
 								 
-	MOV AH,09h                       ;WRITE STRING TO STANDARD OUTPUT
-	LEA DX,TEXT_PLAYER_SCORE           ;give DX a pointer 
+	MOV AH,09h                         ;WRITE STRING TO STANDARD OUTPUT
+	MOV DX,OFFSET TEXT_PLAYER_SCORE           ;give DX a pointer 
 	INT 21h
 	  
   RET	 
@@ -681,6 +844,23 @@ EXIT_PROGRAM PROC
 	INT 21h    					 ;execute the configuration	
 
 EXIT_PROGRAM ENDP
+;-------------------------BUG MOVING ---------------------;
 
+BUG_MOVING PROC
+    BUG_IS_MOVING:
+        CMP BUG_MOVE, 1
+    JNE RETURN_MOING      
+ 	    MOV AX, BUG_VOLACITY_X         
+        ADD BUG_X, AX
+        MOV AX, BUG_VOLACITY_Y
+        ADD BUG_Y, AX 
+
+    RETURN_MOING:
+        RET
+BUG_MOVING ENDP
 
 END MAIN
+
+
+
+
