@@ -9,24 +9,18 @@
    TEXT_MAINMENU_EXIT  DB 'PRESS E TO EXIT THE GAME','$'
    TEXT_GAME_OVER DB 'GAME OVER','$'  
    TEXT_PLAYER_SCORE DB  '0',' ',' ','$'
-  
-   CREATE_NEW_PLATFORM DB 0
-  
-       
-  
+    
    ;WINDOW FEATURES        
    WINDOW_WIDTH DW 140h                 ;the width of the window (320 pixels)  16   8
    WINDOW_HEIGHT DW 0C8h                ;the height of the window (200 pixels)  10   5
    
-   
    ;BALL FEATURES
-                                        ;Ball starts at y=188 and goes up  
    BALL_CENTER_X DW 0A0h                ;current X position (column) of the ball
    BALL_CENTER_Y DW 0B9h                 ;current Y position (line) of the ball     
    BALL_RADIUS DW 08h    
-   ORIGINAL_BALL_VELOCITY_Y DW 0FFF1h         ;original velocity is -16              V collision=-15
-   BALL_VELOCITY_X DW 0Ah               ;X (horizontal) velocity of the ball
-   BALL_VELOCITY_Y DW 0FFF1h               ;Y (vertical) velocity of the ball       ;V0=-17
+   ORIGINAL_BALL_VELOCITY_Y DW 0FFF0h         ;original velocity is -17              V collision=-15
+   BALL_VELOCITY_X DW 0Ah                           ;X (horizontal) velocity of the ball
+   BALL_VELOCITY_Y DW 0FFF0h               ;Y (vertical) velocity of the ball       ;V0=-17
    BALL_DIRECTION DB 0 ;0 means it is going up ,at first the direction is 0   
    BALL_COLLIDED DB 0
     
@@ -35,7 +29,6 @@
    D_Y DW 0   
    P DW 0
 
- 
    ;PLATFORMS MAIN FEATURES   
    PLATFORM_WIDTH DW 50
    PLATFORM_HEIGHT DW 5    
@@ -53,19 +46,19 @@
    PLATFORM_BROKEN_X DW ?         ;x=random                         
    PLATFORM_BROKEN_Y DW 0FFE2h    ;y=-30
    PLATFORM_BROKEN_RAND_X DB 0    ;to check if we caculated random x for the broken platform
-   
-   
+     
    ;NEW RANDOM PLATFORM FEATURES    
    ;THIS PLATFORM WILL BE THE SUBSTITUTE FOR PLATFORM2 AT FIRST
    PLATFORM_NEW_X DW ?       ;x=random     
    PLATFORM_NEW_Y DW 0FF88h  ;
-
+  
+   ;BUG FEATURES   
+   SHOW_BUG DB 0
+   BUG_WIDTH DW 05h              ;default bug width  
+   BUG_X DW 0A0h                  ;current X position (column) of the bug 
+   BUG_Y DW 0FFF1h                  ;current Y position (line) of the bug  =-15
+   BUG_VELOCITY_X DW 07h 
    
-   ;BUG FEATURES
-   BUG_WIDTH DW 04h              ;default bug width  
-   BUG_X DW 00h                  ;current X position (column) of the bug 
-   BUG_Y DW 50h                  ;current Y position (line) of the bug   
-   BUG_VELOCITY_X DW 08h
    BUG_MOVE DW 0
    HIT_BUG DB 0       
    
@@ -74,7 +67,8 @@
    SCORE DB 0
    TIME_AUX DB 0 
    MOVE_PAGE DB 0 
-   GAME_ACTIVE DB 1                     ;is the game active?  
+   GAME_ACTIVE DB 1  
+   CREATE_NEW_PLATFORM DB 0                   ;is the game active?  
 ;---------------------------------MAIN CODE-----------------------------;
 .CODE
 
@@ -98,42 +92,44 @@ MAIN PROC FAR
 		JMP CHECK_MOVING 
 
 		
-		USE_RANDOM: 
-
-					 MOV CREATE_NEW_PLATFORM,0
-					 ;OldRange = (OldMax - OldMin)  
+		USE_RANDOM:   
+		             ;OldRange = (OldMax - OldMin)  
 					 ;NewRange = (NewMax - NewMin)  
 					 ;NewValue = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin  
 					 ;new new platform's x should be in range of [0,250]
 					 ;old range=9 ,new range=250 ,new_val=x*(250/9=25)
+                                                                              
+					 MOV CREATE_NEW_PLATFORM,0
 					 MOV AH,00h
 					 MOV AL,DL
-					 MOV BL,0Ah
-					 DIV BL   ;AH has the reaminder   
-					 MOV AL,AH
-					 MOV BL,1Bh ;BL=27
-					 MUL BL   ;AX has the reult (between 0 to 250)     
-					 MOV PLATFORM_NEW_X,AX
-					 MOV PLATFORM_NEW_Y,0FF88h ;not in the page
+					 MOV BL,03h
+					 MUL BL   ;AH has the reaminder   
+					 CMP AX,104h ;260 
+	                 JL  sett 	       
+	                 MAKE: 
+	                      SUB AX,25h  
+	                 sett:                    	                    
+					  MOV PLATFORM_NEW_X,AX
+					  MOV PLATFORM_NEW_Y,0FF88h ;not in the page  
 		        
 		  CHECK_MOVING:  
              CMP MOVE_PAGE,1     ;check for moving
              JNE PRINTING_PLAY
 	    	
-	    	MOVEMENT:
-              
+	      MOVEMENT:
 		        CALL MOVE_PLATFORM2_DOWN 
-                
-		    
+		            
 		PRINTING_PLAY:       
           CALL CLEAR_SCREEN                      
           CALL MOVE_BALL
           CALL DRAW_BALL
           CALL DRAW_PLATFORM  
-          CALL DRAW_SCORE
-		  ;CALL BUG_MOVING
-		  ;CALL DRAW_BUG
-           
+          CALL DRAW_SCORE   
+          CMP SHOW_BUG,1
+          JNE  CHECK_ON_GAME
+		  CALL BUG_MOVING
+		  CALL DRAW_BUG
+        CHECK_ON_GAME:    
           CMP GAME_ACTIVE,00h
           JE SHOW_GAME_OVER              
           JMP CHECK_TIME      
@@ -155,38 +151,9 @@ MOVE_PLATFORM2_DOWN PROC
       ADD PLATFORM2_Y,0Ah     ;else we increase the y
       ADD PLATFORM1_Y,0Ah 
       ADD PLATFORM_NEW_Y,0Ah      
+      JMP CHECK_PAGE 
       
-      
-      CMP PAGE_NUMBER,02h                        ;It means we are going to change the page to 3 so we need to move down our platform
-      JNE MOVE_DOWN_BROKEN_PLATFORM_FROM_120     ;if not check if we should bring down the platform  
-      
-    CREATE_BROKEN_PLATFORM_IN_PAGE:             
-    
-       CMP PLATFORM_BROKEN_RAND_X,1      ;Check if we calculated x for the broken platform         
-       JE  MOVE_DOWN_BROKEN_PLATFORM     ;If done just move to movnig part
-       CALL X_BROKEN_PLATFORM            ;Else we call the function
-          	    
-	   
-	   MOVE_DOWN_BROKEN_PLATFORM :   ;else the broken platform should go down cause the page is changing
-           ADD PLATFORM_BROKEN_Y,0Ah     
-           RET
-           
-       MOVE_DOWN_BROKEN_PLATFORM_FROM_120:  
-              
-        CMP  PLATFORM_BROKEN_Y,78h    ;78h=120
-        JL   BACK 
-        ADD PLATFORM_BROKEN_Y,0Ah
-        CMP PLATFORM_BROKEN_Y,0D2h ;if y=210        
-        JL BACK       
-           MOV PLATFORM_BROKEN_Y,0FFE2h
-           MOV SHOW_BROKEN_PLATFORM,0
-           MOV PLATFORM_BROKEN_RAND_X,0                  
-             
-     BACK:                                                    
-        RET  
-
-   
-    STOP_MOVING:
+      STOP_MOVING:
         INC PAGE_NUMBER 
         MOV MOVE_PAGE,0h  
         CMP PAGE_NUMBER,04h
@@ -202,8 +169,62 @@ MOVE_PLATFORM2_DOWN PROC
        
             MOV AX,PLATFORM_NEW_X         ;change platform2 values to the new random platform
             MOV PLATFORM2_X,AX   
-            MOV PLATFORM2_Y,1Eh           ;platform2_y=30
+            MOV PLATFORM2_Y,1Eh           ;platform2_y=30	
 		RET
+    
+     CHECK_PAGE: 
+ 
+     CMP PAGE_NUMBER,02h                        ;It means we are going to change the page to 3 so we need to move down our platform
+     JE PAGE_02_ENDING                          ;if not check if we should bring down the platform  
+                                                ;bring down inr page 3 ending
+     CMP PAGE_NUMBER,03h             ;CHECK FOR BUG COMING
+     JE PAGE_03_ENDING 
+      
+     CMP  PAGE_NUMBER,00h
+     JE PAGE_0_ENDING
+     JMP BACK 
+  
+    PAGE_02_ENDING:             
+       
+       CMP PLATFORM_BROKEN_RAND_X,1      ;Check if we calculated x for the broken platform         
+       JE  MOVE_DOWN_BROKEN_PLATFORM     ;If done just move to movnig part
+       CALL X_BROKEN_PLATFORM            ;Else we call the function
+          	    
+	   MOVE_DOWN_BROKEN_PLATFORM :   ;else the broken platform should go down cause the page is changing
+           ADD PLATFORM_BROKEN_Y,0Ah     
+       RET                                              
+    
+    PAGE_03_ENDING:
+     
+       MOVE_DOWN_BROKEN_PLATFORM_FROM_120:       
+         CMP  PLATFORM_BROKEN_Y,78h    ;78h=120
+         JL   CREATE_BUG 
+         ADD PLATFORM_BROKEN_Y,0Ah
+         CMP PLATFORM_BROKEN_Y,0D2h ;if y=210        
+         JL CREATE_BUG       
+           MOV PLATFORM_BROKEN_Y,0FFE2h
+           MOV SHOW_BROKEN_PLATFORM,0
+           MOV PLATFORM_BROKEN_RAND_X,0          
+   
+       CREATE_BUG: 
+          MOV SHOW_BUG,1  
+          ADD BUG_Y,05h
+     RET      
+         
+    PAGE_0_ENDING:
+        CMP  BUG_Y,3Ch    ;60
+        JL   BACK 
+        ADD BUG_Y,0Ah
+        CMP BUG_Y,0C9h ;if y=201   
+        JL BACK   
+        SET_BUG:       
+           MOV BUG_Y,0FFF1h  
+           NEG BUG_VELOCITY_X
+           MOV SHOW_BUG,0             
+     BACK:
+        RET   
+        
+
 MOVE_PLATFORM2_DOWN ENDP
 
 
@@ -318,7 +339,6 @@ MOVE_BALL PROC
         RET  
     NEXT_PAGE:
         MOV BALL_CENTER_Y,0BCH
-
         RET
 MOVE_BALL ENDP  
 ;---------------------------CHECK_FOR_KEYBOARD----------------------;
@@ -376,47 +396,15 @@ CHECK_FOR_KEYBOARD ENDP
 
 ;---------------------------CHECK_FOR_COLLIDING----------------------;
 CHECK_FOR_COLLIDING PROC 
-    ; check for bug colliding
-    ;hello aleykom 
-    JMP COLIDING_CONTINUE
-    CHECK_BUG_COLLIDING: 
-        ; LEFT
-        MOV AX,BUG_X
-        MOV BX, BALL_CENTER_X
-        ADD BX, BALL_RADIUS
-        CMP BX, AX
-        JL COLIDING_CONTINUE
+   
+    
+    CMP SHOW_BUG ,0
+    JE COLLIDING_CONTINUE
+    
+    CHECK_BUG:
+       CALL CHECK_BUG_COLLIDING
 
-        ; RIGHT
-        MOV AX,BUG_X
-        ADD AX, BUG_WIDTH
-        MOV BX, BALL_CENTER_X
-        SUB BX, BALL_RADIUS
-        CMP BX, AX
-        JG COLIDING_CONTINUE
-
-        ; TOP
-        MOV AX,BUG_Y
-        MOV BX, BALL_CENTER_Y
-        ADD BX, BALL_RADIUS
-        CMP BX, AX
-        JL COLIDING_CONTINUE
-
-        ; BOTTOM
-        MOV AX,BUG_Y
-        ADD AX, BUG_WIDTH
-        MOV BX, BALL_CENTER_Y
-        SUB BX, BALL_RADIUS
-        CMP BX, AX
-        JG COLIDING_CONTINUE
-
-        ; HITTED
-        MOV HIT_BUG, 1
-
-        MOV GAME_ACTIVE,00h 
-        RET
-
-     COLIDING_CONTINUE:
+    COLLIDING_CONTINUE:
 
       
 	 CMP BALL_DIRECTION,1    ;if the ball is going up collision does not affect
@@ -500,17 +488,14 @@ CHECK_FOR_COLLIDING PROC
 	         RET              
 CHECK_FOR_COLLIDING ENDP   
 ;---------------------------UPDATE_TEXT_SCORE----------------------; 
-; as we assume the maximum score is 99 so we do not need a stack
-UPDATE_TEXT_SCORE  PROC 
+UPDATE_TEXT_SCORE  PROC             ; As we assume the maximum score is 99 so we do not need a stack
         XOR AX,AX
 		MOV AL,SCORE  
-		MOV BL,0Ah    
-	    XOR DX,DX
+		MOV BL,0Ah                   ;AL=AX/operand  Operand=BL=10 
+	    XOR DX,DX                    ;AH=remainder 
 	    MOV CX,0  
 	    MOV SI ,OFFSET TEXT_PLAYER_SCORE  
-    label1:
-        ;operand=BL=10 and a byte so AL=AX/operan
-        ;AH=remainder           
+    label1:                                               
          DIV BL       
          MOV DL,AH       
          PUSH DX  ;DX is the las digit 
@@ -542,11 +527,10 @@ CHANGE_VELOCITY PROC
     INC BALL_VELOCITY_Y         ;If the velocity is zero the it is at top ,we make velocity=1
     MOV BALL_DIRECTION,1             ;the ball is moving down
 
-
     RET
     INCREASE_SPEED_Y:
         INC BALL_VELOCITY_Y     ;
-        CMP BALL_VELOCITY_Y,0Fh  ;15
+        CMP BALL_VELOCITY_Y,10h  ;17
         JG SET
         RET   
         SET:
@@ -862,18 +846,58 @@ EXIT_PROGRAM PROC
 	INT 21h    					 ;execute the configuration	
 
 EXIT_PROGRAM ENDP
-;-------------------------BUG MOVING ---------------------;
+;-------------------------CHECK_BUG_COLLIDING ---------------------;
 
+CHECK_BUG_COLLIDING PROC  
+      ; LEFT
+        MOV AX,BUG_X
+        MOV BX, BALL_CENTER_X
+        ADD BX, BALL_RADIUS
+        CMP BX, AX
+        JL NOT_COLLIDED
+
+        ; RIGHT
+        MOV AX,BUG_X
+        ADD AX, BUG_WIDTH
+        MOV BX, BALL_CENTER_X
+        SUB BX, BALL_RADIUS
+        CMP BX, AX
+        JG NOT_COLLIDED
+
+        ; TOP
+        MOV AX,BUG_Y
+        MOV BX, BALL_CENTER_Y
+        ADD BX, BALL_RADIUS
+        CMP BX, AX
+        JL NOT_COLLIDED
+
+        ; BOTTOM
+        MOV AX,BUG_Y
+        ADD AX, BUG_WIDTH
+        MOV BX, BALL_CENTER_Y
+        SUB BX, BALL_RADIUS
+        CMP BX, AX
+        JG NOT_COLLIDED
+
+        ; HITTED
+        MOV HIT_BUG, 1
+        MOV GAME_ACTIVE,00h 
+        
+   NOT_COLLIDED:   
+     RET
+CHECK_BUG_COLLIDING ENDP  
+
+;-------------------------BUG_MOVING ---------------------;
 BUG_MOVING PROC
     BUG_IS_MOVING:            
- 	    MOV AX, BUG_VELACITY_X         
+ 	    MOV AX, BUG_VELOCITY_X         
         ADD BUG_X, AX    
         CMP BUG_X,136h ;310 in decimal
-        JG NEG_VELOCITY_BUG
-        CMP BUG_X,05H
-        JG RETURN_MOING
+        JG  NEG_VELOCITY_BUG
+        CMP BUG_X,03H
+        JG  RETURN_MOING
         NEG_VELOCITY_BUG:
-         NEG BUG_VELACITY_X
+         NEG BUG_VELOCITY_X
     RETURN_MOING:
         RET
 BUG_MOVING ENDP
