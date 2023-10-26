@@ -9,16 +9,6 @@ To run this game, you will need the following:
 - DOS Emulator (e.g., DOSBox)
 - Knowledge of Assembly language and the x86 processor.
 
-## Getting Started 🚀
-
-1. Clone or download the repository to your local machine.
-2. Set up DOSBox on your system.
-3. Mount the directory containing the game files as a drive in DOSBox.
-4. Run the DOSBox emulator.
-5. Change to the mounted drive in DOSBox.
-6. Assemble the source code using an x86-compatible assembler (e.g., MASM).
-7. Run the compiled executable file.
-
 ## How to Play 🎮
 
 To control the character's movement, utilize the j and k keys on your keyboard. The character automatically jumps upon landing on a platform. Your objective is to leap from one platform to another, ascending to higher levels. Be cautious not to fall off the screen or collide with obstacles. Keep an eye on your score, which can be found in the upper right corner of the screen.
@@ -31,8 +21,18 @@ To run the program, you must first download DOSBox and the 8086 assembler. Follo
 
 - Download [DOSBox](https://www.dosbox.com/download.php?main=1) and install it on your system.
 - Obtain the 8086 [assembler](https://drive.google.com/drive/folders/1akM4UNg6StiVE3ehzEstOgOhEw1JBxA0?usp=drive_open) and set it up.
+- Clone or download the repository to your local machine.
 - Execute the following commands in the specified order:
 ```
+mount [DriveLetter] [DirectoryPath]
+```
+- Replace `[DriveLetter]` with an available drive letter (e.g., C, D, E) that you want to assign within DOSBox.
+- Replace `[DirectoryPath]` with the full path to the directory containing the assembly code.
+
+For example, if you want to mount the "C:\Assembly" directory as the C drive in DOSBox, you would use the following command:
+```
+mount c C:\Assembly
+cd C:\Assembly\Project
 masm /a project.asm
 link project
 project
